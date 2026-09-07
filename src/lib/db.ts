@@ -120,5 +120,23 @@ function create(): Db {
 
 // Next.js recarga módulos en dev; una sola conexión por proceso.
 const globalForDb = globalThis as unknown as { __taskflowDb?: Db };
-export const db = globalForDb.__taskflowDb ?? create();
-if (process.env.NODE_ENV !== 'production') globalForDb.__taskflowDb = db;
+
+function getDb(): Db {
+  if (!globalForDb.__taskflowDb) {
+    globalForDb.__taskflowDb = create();
+  }
+  return globalForDb.__taskflowDb;
+}
+
+// Conexión perezosa: importar este módulo no debe abrir ni escribir la base.
+// Next.js importa este módulo al recolectar datos de las páginas durante el
+// build, y abrir la conexión en ese momento puede causar "database is
+// locked" por escrituras concurrentes al mismo archivo SQLite. Con el Proxy,
+// la conexión real recién se crea cuando se llama un método (prepare, exec).
+export const db = new Proxy({} as Db, {
+  get(_target, prop, receiver) {
+    const real = getDb() as unknown as Record<PropertyKey, unknown>;
+    const value = real[prop as keyof typeof real];
+    return typeof value === 'function' ? value.bind(real) : value;
+  },
+});
