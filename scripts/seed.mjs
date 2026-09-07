@@ -205,6 +205,35 @@ const PROYECTOS = [
       },
     ],
   },
+  {
+    key: 'JUMP',
+    name: 'Jumpseller',
+    description: 'Pasar la tienda a temporada de verano y sincronizarla con Stocker.',
+    lead: null,
+    tasks: [
+      {
+        title: 'Pasar toda la colección de invierno a verano',
+        detail: 'Fotos, títulos y precios.',
+        assignee: null,
+        priority: 'urgent',
+      },
+      {
+        title: 'Cambiar títulos de la página, banners y diseño a verano',
+        assignee: null,
+        priority: 'high',
+      },
+      {
+        title: 'Sincronizar todos los SKU con Stocker',
+        assignee: null,
+        priority: 'high',
+      },
+      {
+        title: 'Mejorar la vidriera y la vista de productos',
+        assignee: null,
+        priority: 'medium',
+      },
+    ],
+  },
 ];
 
 const insProject = db.prepare(
