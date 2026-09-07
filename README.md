@@ -55,6 +55,36 @@ Queda en `http://localhost:3000` y los datos persisten en el volumen
 `taskflow-data`. Para un VPS alcanza con eso más un nginx/Caddy adelante para el
 TLS.
 
+### Railway
+
+Railway detecta el `Dockerfile` solo. Los dos puntos que importan son el
+**volumen** y la **carga inicial**.
+
+1. **New Project → Deploy from GitHub repo** y elegí este repo.
+2. **Agregá un volumen** con mount path `/data`. Sin esto el disco es efímero
+   y perdés la base en cada redeploy. Es el paso que más se olvida.
+3. **Variables** del servicio:
+
+   | Variable         | Valor  | Para qué                                     |
+   |------------------|--------|----------------------------------------------|
+   | `SEED_ON_START`  | `true` | Carga la data inicial si la base está vacía  |
+   | `DATA_DIR`       | `/data`| Ya viene en el Dockerfile; explicitarlo no molesta |
+
+   `SEED_ON_START` es idempotente: sólo actúa si no hay ningún proyecto. Se
+   puede dejar prendido como red de seguridad por si el volumen se pierde.
+4. **Settings → Networking → Generate Domain**. El puerto es el `3000` que
+   expone la imagen; si Railway inyecta `PORT`, el servidor lo respeta.
+5. Deploy y abrí la URL.
+
+Cosas a tener en cuenta:
+
+- **Una sola instancia.** SQLite quiere un único proceso escribiendo: no
+  escales réplicas.
+- El contenedor corre como root a propósito, porque los volúmenes se montan
+  como `root:root` y si no el proceso no podría escribir la base.
+- Los volúmenes requieren un plan pago de Railway.
+- Para respaldar, entrá con `railway ssh` y copiá `/data/taskflow.db`.
+
 ### Sin Docker
 
 ```bash
@@ -66,10 +96,11 @@ Con `pm2` o una unit de systemd para que levante solo.
 
 ### Variables de entorno
 
-| Variable   | Default        | Para qué                        |
-|------------|----------------|---------------------------------|
-| `PORT`     | `3000`         | Puerto HTTP                     |
-| `DATA_DIR` | `./data`       | Carpeta de `taskflow.db`        |
+| Variable         | Default  | Para qué                                          |
+|------------------|----------|---------------------------------------------------|
+| `PORT`           | `3000`   | Puerto HTTP                                       |
+| `DATA_DIR`       | `./data` | Carpeta de `taskflow.db`                          |
+| `SEED_ON_START`  | apagado  | Si vale `true`, carga la data inicial cuando la base está vacía |
 
 La imagen de Docker parte de `node:24-slim` y no instala compiladores: el
 `npm ci` no ejecuta ningún script de instalación.
@@ -95,7 +126,8 @@ src/
     TaskDialog.tsx            alta/edición de tarea + comentarios
     ProjectDialog.tsx, MemberDialog.tsx, Nav.tsx, ui.tsx, bits.tsx, Avatar.tsx
   lib/
-    db.ts                     conexión (node:sqlite) y creación de tablas
+    db.ts                     conexión (node:sqlite), tablas y carga inicial
+    initial-data.mjs          el equipo, los proyectos y las tareas de arranque
     schema.mjs                el SQL de las tablas (lo comparten app y seed)
     queries.ts                lecturas
     actions.ts                escrituras (Server Actions)

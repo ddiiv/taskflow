@@ -20,8 +20,11 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     DATA_DIR=/data
 COPY --from=build /app/.next/standalone ./
-RUN mkdir -p /data && chown -R node:node /data /app
-USER node
+RUN mkdir -p /data
+# Corre como root a propósito: los volúmenes que montan Railway, Fly o Docker
+# aparecen como root:root, y un proceso sin privilegios no podría escribir la
+# base. Si desplegás donde controlás el uid del volumen, podés agregar
+# `RUN chown -R node:node /data /app` y `USER node`.
 VOLUME ["/data"]
 EXPOSE 3000
 CMD ["node", "server.js"]

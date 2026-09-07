@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 import { SCHEMA } from './schema.mjs';
+import { loadInitialData } from './initial-data.mjs';
 
 /**
  * Dónde vive taskflow.db. Por defecto `<raíz del proyecto>/data`.
@@ -74,13 +75,46 @@ class Db {
   }
 }
 
+/**
+ * Con SEED_ON_START=true, si la base está vacía carga la data inicial.
+ *
+ * Es para el primer arranque en un servidor con volumen nuevo (Railway, Fly,
+ * Docker), donde no hay una forma cómoda de correr `npm run seed` adentro del
+ * contenedor. Es idempotente: si ya hay proyectos no toca nada, así que se
+ * puede dejar prendido como red de seguridad.
+ */
+function maybeSeed(db: Db): void {
+  const flag = (process.env.SEED_ON_START ?? '').toLowerCase();
+  if (flag !== '1' && flag !== 'true') return;
+
+  const row = db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM projects').get();
+  if (!row || row.n > 0) return;
+
+  const r = db.tx(() => loadInitialData(db));
+  console.log(
+    `[taskflow] Base vacía: cargada la data inicial (${r.personas} personas, ${r.proyectos} proyectos, ${r.tareas} tareas).`,
+  );
+}
+
 function create(): Db {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.accessSync(DATA_DIR, fs.constants.W_OK);
+  } catch (err) {
+    throw new Error(
+      `No se puede escribir en DATA_DIR (${DATA_DIR}). ` +
+        'Si estás en un contenedor con volumen montado, revisá que el usuario ' +
+        `del proceso (uid ${typeof process.getuid === 'function' ? process.getuid() : '?'}) ` +
+        `tenga permiso sobre ese directorio. Causa: ${(err as Error).message}`,
+    );
+  }
+
   // enableForeignKeyConstraints viene en true por defecto.
   const raw = new DatabaseSync(path.join(DATA_DIR, 'taskflow.db'));
   raw.exec('PRAGMA journal_mode = WAL');
   const db = new Db(raw);
   db.exec(SCHEMA);
+  maybeSeed(db);
   return db;
 }
 
