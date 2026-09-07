@@ -61,14 +61,21 @@ Railway detecta el `Dockerfile` solo. Los dos puntos que importan son el
 **volumen** y la **carga inicial**.
 
 1. **New Project → Deploy from GitHub repo** y elegí este repo.
-2. **Agregá un volumen** con mount path `/data`. Sin esto el disco es efímero
-   y perdés la base en cada redeploy. Es el paso que más se olvida.
+2. **Agregá un volumen** y montalo en `/data`. En el canvas del proyecto:
+   click derecho sobre el fondo (o `Cmd/Ctrl + K`) → **Add Volume** → elegí el
+   servicio de TaskFlow → en **Mount path** escribí `/data`. También aparece
+   entrando al servicio, en **Settings → Volumes**. Al guardarlo se redespliega.
+
+   Sin volumen, el disco del contenedor es efímero: cada redeploy o reinicio
+   arranca de cero y perdés toda la base. Es el paso que más se olvida.
 3. **Variables** del servicio:
 
-   | Variable         | Valor  | Para qué                                     |
-   |------------------|--------|----------------------------------------------|
-   | `SEED_ON_START`  | `true` | Carga la data inicial si la base está vacía  |
-   | `DATA_DIR`       | `/data`| Ya viene en el Dockerfile; explicitarlo no molesta |
+   | Variable         | Valor      | Para qué                                 |
+   |------------------|------------|------------------------------------------|
+   | `AUTH_PASSWORD`  | tu clave   | **Sin esto la URL queda abierta a cualquiera** |
+   | `AUTH_USER`      | `equipo`   | Usuario del login (si no la ponés, `admin`) |
+   | `SEED_ON_START`  | `true`     | Carga la data inicial si la base está vacía |
+   | `DATA_DIR`       | `/data`    | Ya viene en el Dockerfile; explicitarlo no molesta |
 
    `SEED_ON_START` es idempotente: sólo actúa si no hay ningún proyecto. Se
    puede dejar prendido como red de seguridad por si el volumen se pierde.
@@ -101,6 +108,8 @@ Con `pm2` o una unit de systemd para que levante solo.
 | `PORT`           | `3000`   | Puerto HTTP                                       |
 | `DATA_DIR`       | `./data` | Carpeta de `taskflow.db`                          |
 | `SEED_ON_START`  | apagado  | Si vale `true`, carga la data inicial cuando la base está vacía |
+| `AUTH_USER`      | `admin`  | Usuario del login                                 |
+| `AUTH_PASSWORD`  | apagado  | Contraseña. **Mientras no la pongas, la app queda abierta.** |
 
 La imagen de Docker parte de `node:24-slim` y no instala compiladores: el
 `npm ci` no ejecuta ningún script de instalación.
@@ -112,6 +121,28 @@ La imagen de Docker parte de `node:24-slim` y no instala compiladores: el
 > `src/lib/db.ts` por Postgres — el resto del código no se entera, porque toda
 > la SQL está en `db.ts`, `queries.ts` y `actions.ts`.
 
+## Acceso
+
+La app se protege con autenticación básica HTTP, en
+[`src/middleware.ts`](src/middleware.ts). Se activa sola en cuanto existe
+`AUTH_PASSWORD`:
+
+```bash
+AUTH_USER=equipo AUTH_PASSWORD='una-contraseña-larga' npm start
+```
+
+Sin esa variable no pide nada, que es lo cómodo para trabajar en local. En
+cualquier servidor con URL pública, **ponela**.
+
+Queda protegido todo lo que lleva datos: las páginas, las Server Actions y los
+payloads RSC. Sólo quedan abiertos los assets estáticos del build (`/_next/…` y
+el ícono), que no contienen información.
+
+Es una única credencial compartida por el equipo: no hay usuarios ni sesiones,
+así que el registro de quién hizo cada cosa sigue siendo el campo "autor" de los
+comentarios. Alcanza para una herramienta interna. Si en algún momento hace
+falta trazabilidad real, el camino es login con sesión y una tabla `users`.
+
 ## Estructura
 
 ```
@@ -121,6 +152,7 @@ src/
     proyectos/[id]/page.tsx   tablero del proyecto
     equipo/page.tsx           personas y carga de trabajo
     layout.tsx, globals.css   shell y estilos (CSS plano, sin Tailwind)
+  middleware.ts               login (autenticación básica HTTP)
   components/
     Board.tsx                 tablero Kanban + drag & drop (cliente)
     TaskDialog.tsx            alta/edición de tarea + comentarios
@@ -140,9 +172,8 @@ servidor, sin capa de API ni fetch a mano. Por eso no hay carpeta `api/`.
 
 ## Lo que no tiene (a propósito)
 
-- **Autenticación.** Cualquiera que llegue a la URL puede editar todo. Para un
-  equipo interno, ponelo detrás de una VPN o de un `basic auth` en nginx. Si
-  necesitás login de verdad, el lugar es un `middleware.ts` + una tabla `users`.
+- **Usuarios individuales.** El login es una sola contraseña compartida (ver
+  [Acceso](#acceso)), no hay cuentas por persona ni permisos por rol.
 - Sprints, epics, workflows configurables, adjuntos, notificaciones por mail.
 - Historial de cambios (sí hay comentarios, que cubren el 90% del caso).
 
