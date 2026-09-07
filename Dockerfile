@@ -25,6 +25,8 @@ RUN mkdir -p /data
 # aparecen como root:root, y un proceso sin privilegios no podría escribir la
 # base. Si desplegás donde controlás el uid del volumen, podés agregar
 # `RUN chown -R node:node /data /app` y `USER node`.
-VOLUME ["/data"]
+# NOTA: sin instrucción VOLUME — en Railway la persistencia de /data se logra
+# adjuntando un Railway Volume con mount path /data (Settings → Volumes), no
+# con VOLUME de Docker, que el validador de build de Railway rechaza.
 EXPOSE 3000
 CMD ["node", "server.js"]
